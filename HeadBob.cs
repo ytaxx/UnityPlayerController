@@ -2,8 +2,8 @@ using UnityEngine;
 
 public class HeadBob : MonoBehaviour
 {
-    // camera settings
-    [Header("Camera")]
+    // components
+    [Header("Components")]
     [SerializeField] private Camera playerCamera;
     [SerializeField] private Transform playerBody;
 
@@ -21,6 +21,7 @@ public class HeadBob : MonoBehaviour
     [SerializeField] private float breathAmplitude = 0.012f;
     [SerializeField] private float breathPitchAmount = 0.25f;
     [SerializeField] private float breathRollAmount = 0.35f;
+    [SerializeField] private float breathHorizontalScale = 0.25f;
 
     // bob look
     [Header("Bob Look")]
@@ -28,6 +29,10 @@ public class HeadBob : MonoBehaviour
     [SerializeField] private float bobRollAmount = 0.4f;
     [SerializeField] private float bobYawAmount = 0.4f;
     [SerializeField, Range(0f, 1f)] private float bobIntensity = 0.5f;
+
+    // sprint bob
+    [Header("Sprint Bob")]
+    [SerializeField] private float runBobSpeedMultiplier = 1.5f;
 
     // stabilizer
     [Header("Stabilizer")]
@@ -40,7 +45,6 @@ public class HeadBob : MonoBehaviour
     [SerializeField] private float defaultFov = 60f;
     [SerializeField] private float runFov = 75f;
     [SerializeField] private float walkFov = 62f;
-    [SerializeField] private float fovChangeSpeed = 5f;
     [SerializeField] private float fovSmoothTime = 0.12f;
 
     // camera collision
@@ -119,7 +123,8 @@ public class HeadBob : MonoBehaviour
             float moveBlendTarget = inputBlend * movementBlend;
             bobBlend = Mathf.SmoothDamp(bobBlend, moveBlendTarget, ref bobBlendVelocity, bobBlendSmoothTime);
 
-            float speedMultiplier = movement.IsRunning ? 1.5f : 1.0f;
+            // use serialized run multiplier instead of hardcoded 1.5f
+            float speedMultiplier = movement.IsRunning ? runBobSpeedMultiplier : 1.0f;
             float speedFactor = Mathf.Clamp01(movement.CurrentVelocity.magnitude / Mathf.Max(0.01f, maxSpeed));
             bobTimer += Time.deltaTime * bobFrequency * Mathf.Lerp(0.9f, 1.2f, speedFactor) * speedMultiplier;
 
@@ -128,7 +133,6 @@ public class HeadBob : MonoBehaviour
             float idlePhase = Time.time * idleBobFrequency;
             float idleBobY = Mathf.Sin(idlePhase) * idleBobAmplitude;
 
-            // compute horizontal bob directly without creating intermediate locals that could be flagged as unused
             float bobX = Mathf.Lerp(
                 Mathf.Sin(idlePhase * 0.5f) * bobHorizontalAmplitude * idleBobAmplitude,
                 Mathf.Sin(bobTimer) * bobHorizontalAmplitude * Mathf.Lerp(0.6f, 1f, inputMag) * bobIntensity,
@@ -139,7 +143,8 @@ public class HeadBob : MonoBehaviour
             float breathBlend = 1f - bobBlend;
             float breathSignal = (Mathf.Sin(Time.time * breathFrequency) + 0.25f * Mathf.Sin(Time.time * breathFrequency * 2f)) * breathAmplitude * breathBlend;
             bobY += breathSignal;
-            bobX += breathSignal * 0.25f;
+            // use serialized breathHorizontalScale instead of magic 0.25f
+            bobX += breathSignal * breathHorizontalScale;
 
             float breathPitch = Mathf.Sin(Time.time * breathFrequency + 0.4f) * breathPitchAmount * breathBlend;
             float breathRoll = Mathf.Sin(Time.time * breathFrequency * 0.7f + 1.2f) * breathRollAmount * breathBlend;
@@ -149,7 +154,7 @@ public class HeadBob : MonoBehaviour
             float movementBobRoll = Mathf.Sin(bobTimer * 0.5f) * bobRollAmount * bobBlend * bobIntensity;
             float movementBobYaw = Mathf.Cos(bobTimer * 0.5f) * bobYawAmount * bobBlend * bobIntensity;
 
-            // stabilizer - counter-rotate to keep focus point stable
+            // stabilizer -- counter-rotate to keep focus point stable
             float compPitch = 0f;
             float compYaw = 0f;
             if (useStabilizer && focusDistance > 0.01f)
@@ -162,6 +167,7 @@ public class HeadBob : MonoBehaviour
             float combinedRoll = breathRoll + movementBobRoll;
             float combinedYaw = movementBobYaw + compYaw;
 
+            // null check before enabled check to prevent NullReferenceException
             if (mouseLook != null && mouseLook.enabled)
             {
                 mouseLook.SetBreathOffset(combinedPitch, combinedRoll, combinedYaw);
@@ -190,18 +196,19 @@ public class HeadBob : MonoBehaviour
             Vector3 targetLocal = new Vector3(defaultCamLocalPos.x, baseY, defaultCamLocalPos.z);
             Vector3 targetWorld = playerBody.TransformPoint(targetLocal);
             playerCamera.transform.position = Vector3.SmoothDamp(playerCamera.transform.position, targetWorld, ref camPosSmoothVelocity, camPositionSmoothTime);
-            if (mouseLook != null) mouseLook.SetBreathOffset(0f, 0f);
+
+            // match the 3-argument signature used in the bob branch to keep calls consistent
+            if (mouseLook != null) mouseLook.SetBreathOffset(0f, 0f, 0f);
         }
 
         if (useFovKick)
         {
-            // fov math
+            // fov math -- removed fovChangeSpeed division as it created a confusing
+            // compound tuning relationship. fovSmoothTime now directly controls blend speed.
             bool isRunning = movement.IsRunning && actualHorSpeed > 0.1f;
             bool isWalking = !isRunning && actualHorSpeed > 0.05f;
             float targetFov = isRunning ? runFov : (isWalking ? walkFov : defaultFov);
-            // use fov change speed to tune how aggressively fov changes relative to the smooth time
-            float effectiveFovSmooth = Mathf.Max(0.0001f, fovSmoothTime / Mathf.Max(0.0001f, fovChangeSpeed));
-            playerCamera.fieldOfView = Mathf.SmoothDamp(playerCamera.fieldOfView, targetFov, ref fovVelocity, effectiveFovSmooth);
+            playerCamera.fieldOfView = Mathf.SmoothDamp(playerCamera.fieldOfView, targetFov, ref fovVelocity, fovSmoothTime);
         }
 
         lastPosition = playerBody.position;
