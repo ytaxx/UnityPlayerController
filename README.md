@@ -1,50 +1,60 @@
-# Player (Unity) — First-Person Player Components
+#  Unity Player Controller
 
-Collection of small, focused Unity components for a responsive first-person player: movement, input, camera look, head bob, and stamina (sprint). Designed to be dropped into a Unity project and tweaked via the Inspector.
+This repository contains a small set of Unity scripts that provide a basic first-person player. The code is modular so you can use only the parts you need. Everything is easy to change through the Inspector.
 
-Highlights
-- Lightweight, modular components that separate input, movement, camera, and audio/visual effects.
-- Works with Unity Input System (new) or can be adapted for other input systems.
-- Small compatibility shims included so the code compiles without the original project cores.
+Who this is for
+- Beginners learning how player controllers work.
+- Developers who want a simple, tweakable starting point for first-person controls.
 
-Requirements
-- Unity 2019.4 LTS or newer (2020.3+ recommended).
-- (Optional) Unity Input System package (com.unity.inputsystem) if you want the provided bindings.
+What is included
+- `PlayerInput` - simple input wrapper that exposes `Move`, `Look`, `RunHeld`, and `ConsumeJump()`.
+- `PlayerMovement` - walking, running, jumping, coyote time, and smooth acceleration.
+- `PlayerStamina` - simple sprint stamina with drain and recharge.
+- `MouseLook` - camera rotation with optional tilt and smoothing.
+- `HeadBob` - camera bobbing, breathing, and FOV effects with collision handling.
+- `Compat/` - small shims so code compiles without internal project packages.
 
-Quick install
-1. Copy the `Player` folder into your project's `Assets/` folder.
-2. Open Unity and let it compile.
-3. Create an empty GameObject named `Player` and add these components (in order of dependency):
-   - `CharacterController` (built-in)
-   - `PlayerInput`
-   - `PlayerMovement`
-   - `PlayerStamina` (optional, used by sprinting)
-4. Create a child `Camera` under `Player` and add `MouseLook` and `HeadBob` (or attach `MouseLook` to a camera holder).
+Minimum requirements
+- Unity 2019.4 or newer. Unity 2020.3 LTS is recommended.
 
-Scene setup (quick)
-- Ensure `PlayerMovement` and `PlayerInput` are on the same GameObject (required by the code).
-- `PlayerMovement` requires a `CharacterController` on the same GameObject.
-- Tune serialized fields in the Inspector (speeds, jump height, FOV, bob amounts).
+Setup
+1. Copy the `Player` folder into your project's `Assets` folder.
+2. Open the project in Unity and wait for scripts to compile.
+3. Create an empty GameObject called `Player` at the scene origin.
+4. Add a `CharacterController` component to `Player` (built-in component).
+5. Add these scripts to the `Player` GameObject: `PlayerInput`, `PlayerMovement`, and optionally `PlayerStamina`.
+6. Create a child GameObject for the camera. Add your `Camera` under it.
+7. Attach `MouseLook` to the camera or its parent, and attach `HeadBob` to the camera.
 
-Usage summary
-- `PlayerInput` — provides runtime values: Move (Vector2), Look (Vector2), RunHeld (bool), JumpPressed (bool) and helpers `ConsumeJump()` / `ResetInputs()`.
-- `PlayerMovement` — handles movement, jumping, coyote time, smoothing, sprint integration. Public API: `CurrentVelocity`, `IsGrounded`, `IsRunning`, `CurrentInput`, `WalkSpeed`, `RunSpeed`, `CurrentSpeed`. Methods: `PauseMovement()` / `ResumeMovement()`.
-- `PlayerStamina` — manages sprint budget and recharge. Public API: `StaminaPercent`, `IsSprinting`, `SetSprinting()`, `OnStaminaStateChanged` event. It also publishes `StaminaChangedEvent` to `GameEventBus` when present.
-- `MouseLook` — camera rotation and tilt. API: `SetLookAngles(pitch,yaw)` and `SetBreathOffset(pitch,roll,yaw)`.
-- `HeadBob` — camera bob, breath sway, FOV kick, and collision handling. Configured in Inspector.
+Starter inspector values
+- `PlayerMovement`: WalkSpeed = 2, RunSpeed = 4, JumpHeight = 1.2
+- `MouseLook`: MouseSensitivity = 0.2, LookSmoothTime = 0.06
+- `HeadBob`: UseHeadBob = true, BobFrequency = 12
 
-Documentation
-- Read the API summary: [docs/API.md](docs/API.md)
-- Read the integration and usage guide: [docs/USAGE.md](docs/USAGE.md)
+Basic controls (default)
+- Move: W/A/S/D or arrow keys
+- Look: Mouse
+- Run: Left Shift
+- Jump: Space
 
-Examples
-- The repository currently includes compatibility shims under `Compat/` so the assets compile standalone. You can create a simple scene by following the Quick install steps.
+How to use in your game
+- Read runtime state from `PlayerMovement` (e.g., `IsGrounded`, `CurrentVelocity`) to drive animations.
+- Bind UI to `PlayerStamina.OnStaminaStateChanged` or read `StaminaPercent` each frame.
+- Use `PlayerMovement.PauseMovement()` to freeze player input during dialog or menus. Call `ResumeMovement()` when done.
 
-Testing & CI
-- This is a Unity codebase; automated play-mode tests are not included. For CI you can add Unity Test Runner jobs or a headless Linux build pipeline.
+Technical details
+- Components are small, single-responsibility MonoBehaviours. Public properties provide runtime state; methods are side-effect free except where intended (for example `SetSprinting`).
+- `PlayerInput` builds simple Input System actions at runtime. If you prefer another input layer, keep the public properties (`Move`, `Look`, `RunHeld`, `ConsumeJump()`) and replace the internal bindings.
+- `PlayerMovement` relies on `CharacterController` for collision and grounding. Movement uses `Mathf.MoveTowards` for speed smoothing and separate gravity integration for stable jumping and coyote time.
+- `PlayerStamina` updates via `Compat/UpdateManager` when the project's event system is not present. It exposes `OnStaminaStateChanged` and also publishes `StaminaChangedEvent` to `GameEventBus` if available.
+- `HeadBob` and `MouseLook` use SmoothDamp and time-scaled timers so motion is frame-rate independent. Camera collision is handled with a sphere cast to avoid clipping into geometry.
+- `Compat/` contains small shims: `UpdateManager` (per-frame callbacks), `GameEventBus` (Publish no-op), `StaminaChangedEvent`, and `ProfilerMarkers`. Replace these with your game's systems for tighter integration.
+- Performance notes: avoid heavy work in Update callbacks. The included `UpdateManager` batches callbacks; if you integrate into an existing scheduler prefer grouped updates and early returns when components are disabled.
+- Extensibility: read/write the public properties from other scripts, subscribe to `OnStaminaStateChanged`, or override a component by subclassing and swapping the script on the GameObject.
 
-Contributing
-- See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution workflow and testing suggestions.
+Where to go next
+- See [docs/USAGE.md](docs/USAGE.md) for detailed setup and troubleshooting.
+- See [docs/API.md](docs/API.md) for quick code snippets and examples.
 
 License
-- MIT — see [LICENSE](LICENSE).
+- MIT. See [LICENSE](LICENSE) for details.
