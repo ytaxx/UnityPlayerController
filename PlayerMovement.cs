@@ -95,7 +95,8 @@ public class PlayerMovement : MonoBehaviour
         // Ask stamina to sprint, but then read back the authoritative state from stamina.
         // This prevents using a stale local `IsRunning` value when stamina depletes later
         // in the frame (execution order differences between components).
-        stamina?.SetSprinting(wantsRun && (horizontal != 0f || vertical != 0f), input.RunHeld);
+        bool requestedSprint = wantsRun && (horizontal != 0f || vertical != 0f);
+        stamina?.SetSprinting(requestedSprint, input.RunHeld);
         IsRunning = (stamina != null) ? stamina.IsSprinting : wantsRun;
 
         if (IsGrounded)

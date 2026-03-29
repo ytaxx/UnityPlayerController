@@ -35,6 +35,8 @@ public class PlayerStamina : MonoBehaviour
     [SerializeField, Min(1f)] private float maxStamina = 100f;
 
     private bool isSprinting;
+    // Whether we've registered OnTick with the centralized UpdateManager.
+    private bool registeredWithUpdateManager = false;
 
     [Header("Behavior")]
     [Tooltip("Cooldown (seconds) after stopping sprint before recharge begins.")]
@@ -81,14 +83,24 @@ public class PlayerStamina : MonoBehaviour
     private void OnEnable()
     {
         OnStaminaStateChanged?.Invoke(StaminaPercent, isSprinting);
-        if (UpdateManager.Instance != null)
-            UpdateManager.Instance.Register(this, UpdateManager.UpdateGroup.Normal, OnTick);
+        EnsureRegisteredWithUpdateManager();
+    }
+
+    private void Start()
+    {
+        // Backstop: Unity guarantees all Awake() calls complete before any Start().
+        // If OnEnable() fired before UpdateManager.Awake() set Instance (undefined
+        // cross-object Awake order), OnTick was never registered. This ensures it is.
+        EnsureRegisteredWithUpdateManager();
     }
 
     private void OnDisable()
     {
-        if (UpdateManager.Instance != null)
+        if (registeredWithUpdateManager && UpdateManager.Instance != null)
+        {
             UpdateManager.Instance.Unregister(this);
+        }
+        registeredWithUpdateManager = false;
     }
 
     private void OnTick(float dt)
@@ -181,5 +193,31 @@ public class PlayerStamina : MonoBehaviour
         isSprinting = next;
         OnStaminaStateChanged?.Invoke(StaminaPercent, isSprinting);
         GameEventBus.Publish(new StaminaChangedEvent(StaminaPercent, isSprinting));
+    }
+
+    private void Update()
+    {
+        // Fallback: if UpdateManager isn't present yet (or at all), tick via MonoBehaviour.Update.
+        if (!registeredWithUpdateManager)
+        {
+            if (UpdateManager.Instance != null)
+            {
+                UpdateManager.Instance.Register(this, UpdateManager.UpdateGroup.Normal, OnTick);
+                registeredWithUpdateManager = true;
+                return; // avoid double-tick this frame
+            }
+
+            OnTick(Time.deltaTime);
+        }
+    }
+
+    private void EnsureRegisteredWithUpdateManager()
+    {
+        if (registeredWithUpdateManager) return;
+        if (UpdateManager.Instance != null)
+        {
+            UpdateManager.Instance.Register(this, UpdateManager.UpdateGroup.Normal, OnTick);
+            registeredWithUpdateManager = true;
+        }
     }
 }
